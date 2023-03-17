@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 
 	"github.com/ServiceWeaver/weaver"
 )
@@ -9,6 +11,7 @@ import (
 // Reverser component.
 type Reverser interface {
 	Reverse(context.Context, string) (string, error)
+	ReverseController(context.Context) error
 }
 
 // Implementation of the Reverser component.
@@ -23,4 +26,18 @@ func (r *reverser) Reverse(_ context.Context, s string) (string, error) {
 		runes[i], runes[n-i-1] = runes[n-i-1], runes[i]
 	}
 	return string(runes), nil
+}
+
+func (rev *reverser) ReverseController(context.Context) error {
+	logger := rev.Logger()
+	logger.Info("componente reverser inicializado")
+	http.HandleFunc("/reverse", func(w http.ResponseWriter, r *http.Request) {
+		defer logger.Info("acabei de reverter uma string")
+		reversed, err := rev.Reverse(r.Context(), r.URL.Query().Get("name"))
+		if err != nil {
+			logger.Error("erro", nil)
+		}
+		fmt.Fprintf(w, reversed)
+	})
+	return nil
 }

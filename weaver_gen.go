@@ -19,7 +19,7 @@ func init() {
 			return reverser_local_stub{impl: impl.(Reverser), tracer: tracer}
 		},
 		ClientStubFn: func(stub codegen.Stub, caller string) any {
-			return reverser_client_stub{stub: stub, reverseMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/mendoncas/service-weaver/Reverser", Method: "Reverse"})}
+			return reverser_client_stub{stub: stub, reverseMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/mendoncas/service-weaver/Reverser", Method: "Reverse"}), reverseControllerMetrics: codegen.MethodMetricsFor(codegen.MethodLabels{Caller: caller, Component: "github.com/mendoncas/service-weaver/Reverser", Method: "ReverseController"})}
 		},
 		ServerStubFn: func(impl any, addLoad func(uint64, float64)) codegen.Server {
 			return reverser_server_stub{impl: impl.(Reverser), addLoad: addLoad}
@@ -51,11 +51,29 @@ func (s reverser_local_stub) Reverse(ctx context.Context, a0 string) (r0 string,
 	return s.impl.Reverse(ctx, a0)
 }
 
+func (s reverser_local_stub) ReverseController(ctx context.Context) (err error) {
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.tracer.Start(ctx, "main.Reverser.ReverseController", trace.WithSpanKind(trace.SpanKindInternal))
+		defer func() {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+			}
+			span.End()
+		}()
+	}
+
+	return s.impl.ReverseController(ctx)
+}
+
 // Client stub implementations.
 
 type reverser_client_stub struct {
-	stub           codegen.Stub
-	reverseMetrics *codegen.MethodMetrics
+	stub                     codegen.Stub
+	reverseMetrics           *codegen.MethodMetrics
+	reverseControllerMetrics *codegen.MethodMetrics
 }
 
 func (s reverser_client_stub) Reverse(ctx context.Context, a0 string) (r0 string, err error) {
@@ -112,6 +130,51 @@ func (s reverser_client_stub) Reverse(ctx context.Context, a0 string) (r0 string
 	return
 }
 
+func (s reverser_client_stub) ReverseController(ctx context.Context) (err error) {
+	// Update metrics.
+	start := time.Now()
+	s.reverseControllerMetrics.Count.Add(1)
+
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		// Create a child span for this method.
+		ctx, span = s.stub.Tracer().Start(ctx, "main.Reverser.ReverseController", trace.WithSpanKind(trace.SpanKindClient))
+	}
+
+	defer func() {
+		// Catch and return any panics detected during encoding/decoding/rpc.
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+		}
+		err = s.stub.WrapError(err)
+
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			s.reverseControllerMetrics.ErrorCount.Add(1)
+		}
+		span.End()
+
+		s.reverseControllerMetrics.Latency.Put(float64(time.Since(start).Microseconds()))
+	}()
+
+	var shardKey uint64
+
+	// Call the remote method.
+	s.reverseControllerMetrics.BytesRequest.Put(0)
+	var results []byte
+	results, err = s.stub.Run(ctx, 1, nil, shardKey)
+	if err != nil {
+		return
+	}
+	s.reverseControllerMetrics.BytesReply.Put(float64(len(results)))
+
+	// Decode the results.
+	dec := codegen.NewDecoder(results)
+	err = dec.Error()
+	return
+}
+
 // Server stub implementations.
 
 type reverser_server_stub struct {
@@ -124,6 +187,8 @@ func (s reverser_server_stub) GetStubFn(method string) func(ctx context.Context,
 	switch method {
 	case "Reverse":
 		return s.reverse
+	case "ReverseController":
+		return s.reverseController
 	default:
 		return nil
 	}
@@ -150,6 +215,25 @@ func (s reverser_server_stub) reverse(ctx context.Context, args []byte) (res []b
 	// Encode the results.
 	enc := codegen.NewEncoder()
 	enc.String(r0)
+	enc.Error(appErr)
+	return enc.Data(), nil
+}
+
+func (s reverser_server_stub) reverseController(ctx context.Context, args []byte) (res []byte, err error) {
+	// Catch and return any panics detected during encoding/decoding/rpc.
+	defer func() {
+		if err == nil {
+			err = codegen.CatchPanics(recover())
+		}
+	}()
+
+	// TODO(rgrandl): The deferred function above will recover from panics in the
+	// user code: fix this.
+	// Call the local method.
+	appErr := s.impl.ReverseController(ctx)
+
+	// Encode the results.
+	enc := codegen.NewEncoder()
 	enc.Error(appErr)
 	return enc.Data(), nil
 }
