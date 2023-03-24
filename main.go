@@ -18,6 +18,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	dbClient, err := weaver.Get[DbClient](root)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	reverser, err := weaver.Get[Reverser](root)
 	if err != nil {
 		log.Fatal(err)
@@ -35,13 +40,15 @@ func main() {
 	})
 
 	http.HandleFunc("/reverse", func(w http.ResponseWriter, r *http.Request) {
-		logger := root.Logger()
-		defer logger.Info("acabei de reverter uma string")
 		reversed, err := reverser.Reverse(r.Context(), r.URL.Query().Get("name"))
 		if err != nil {
 			log.Fatal(err)
 		}
 		fmt.Fprintf(w, reversed)
+	})
+
+	http.HandleFunc("/testConnection", func(w http.ResponseWriter, r *http.Request) {
+		dbClient.StartConnection(r.Context())
 	})
 
 	// reverser.ReverseController(context.TODO())

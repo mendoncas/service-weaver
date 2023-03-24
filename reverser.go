@@ -19,12 +19,22 @@ type reverser struct {
 	weaver.Implements[Reverser]
 }
 
-func (r *reverser) Reverse(_ context.Context, s string) (string, error) {
+func (r *reverser) Reverse(c context.Context, s string) (string, error) {
+
+	log := r.Logger()
+	log.Info("reverti uma string!")
 	runes := []rune(s)
 	n := len(runes)
+	root := weaver.Init(context.Background())
+	dbClient, err := weaver.Get[DbClient](root)
+	if err != nil {
+		log.Error("erro ao obter cliente!", err)
+	}
+
 	for i := 0; i < n/2; i++ {
 		runes[i], runes[n-i-1] = runes[n-i-1], runes[i]
 	}
+	dbClient.Insert(c, "Runas", "Invertidas", string(runes))
 	return string(runes), nil
 }
 
